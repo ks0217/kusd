@@ -17,6 +17,38 @@ contract MockERC20 is ERC20 {
     }
 }
 
+/// @dev ERC-20 that returns false on transfer instead of reverting.
+contract FalseReturningToken {
+    mapping(address => uint256) public balanceOf;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        if (balanceOf[msg.sender] < amount) return false;
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return false; // always returns false to simulate failure
+    }
+}
+
+/// @dev ERC-20 that returns nothing on transfer (like USDT).
+contract NoReturnToken {
+    mapping(address => uint256) public balanceOf;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external {
+        require(balanceOf[msg.sender] >= amount, "insufficient");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        // no return value
+    }
+}
+
 contract kUSDTest is Test {
     kUSD public token;
 
@@ -634,5 +666,97 @@ contract kUSDTest is Test {
 
         assertEq(token.balanceOf(minter), mintAmount - burnAmount);
         assertEq(token.totalSupply(), mintAmount - burnAmount);
+    }
+
+    // ═══════════════════════════════════════════════
+    //  Permit – blacklist & pause guards
+    // ═══════════════════════════════════════════════
+
+    function _signPermit(uint256 privKey, address owner_, address spender_, uint256 value_, uint256 deadline_)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                token.DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                        owner_,
+                        spender_,
+                        value_,
+                        token.nonces(owner_),
+                        deadline_
+                    )
+                )
+            )
+        );
+        (v, r, s) = vm.sign(privKey, digest);
+    }
+
+    function test_permit_revertsWhenPaused() public {
+        uint256 ownerPk = 0xA11CE;
+        address ownerAddr = vm.addr(ownerPk);
+        uint256 deadline = block.timestamp + 1 hours;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(ownerPk, ownerAddr, bob, 100e6, deadline);
+
+        vm.prank(pauser);
+        token.pause();
+
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        token.permit(ownerAddr, bob, 100e6, deadline, v, r, s);
+    }
+
+    function test_permit_revertsWhenOwnerBlacklisted() public {
+        uint256 ownerPk = 0xA11CE;
+        address ownerAddr = vm.addr(ownerPk);
+        uint256 deadline = block.timestamp + 1 hours;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(ownerPk, ownerAddr, bob, 100e6, deadline);
+
+        vm.prank(blacklister);
+        token.blacklist(ownerAddr);
+
+        vm.expectRevert(abi.encodeWithSelector(kUSD.Blacklisted.selector, ownerAddr));
+        token.permit(ownerAddr, bob, 100e6, deadline, v, r, s);
+    }
+
+    function test_permit_revertsWhenSpenderBlacklisted() public {
+        uint256 ownerPk = 0xA11CE;
+        address ownerAddr = vm.addr(ownerPk);
+        uint256 deadline = block.timestamp + 1 hours;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(ownerPk, ownerAddr, bob, 100e6, deadline);
+
+        vm.prank(blacklister);
+        token.blacklist(bob);
+
+        vm.expectRevert(abi.encodeWithSelector(kUSD.Blacklisted.selector, bob));
+        token.permit(ownerAddr, bob, 100e6, deadline, v, r, s);
+    }
+
+    // ═══════════════════════════════════════════════
+    //  Rescue ERC-20 – SafeERC20 behavior
+    // ═══════════════════════════════════════════════
+
+    function test_rescueERC20_revertsOnFalseReturn() public {
+        FalseReturningToken bad = new FalseReturningToken();
+        bad.mint(address(token), 100);
+
+        vm.prank(owner);
+        vm.expectRevert(); // SafeERC20 reverts on false return
+        token.rescueERC20(IERC20(address(bad)), alice, 100);
+    }
+
+    function test_rescueERC20_succeedsWithNoReturnToken() public {
+        NoReturnToken nrt = new NoReturnToken();
+        nrt.mint(address(token), 100);
+
+        vm.prank(owner);
+        token.rescueERC20(IERC20(address(nrt)), alice, 100);
+        assertEq(nrt.balanceOf(alice), 100);
     }
 }

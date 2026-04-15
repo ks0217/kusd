@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
@@ -21,6 +22,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
  *   - Two-step ownership transfer
  */
 contract kUSD is ERC20, ERC20Permit, Pausable {
+    using SafeERC20 for IERC20;
     // ──────────────────────────────────────────────
     //  Errors
     // ──────────────────────────────────────────────
@@ -269,6 +271,20 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
     }
 
     /**
+     * @dev Override permit to prevent blacklisted accounts from granting
+     *      or receiving approvals via signed messages, matching USDC behavior.
+     */
+    function permit(address owner_, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        public
+        override
+        whenNotPaused
+        notBlacklisted(owner_)
+        notBlacklisted(spender)
+    {
+        super.permit(owner_, spender, value, deadline, v, r, s);
+    }
+
+    /**
      * @dev Override transferFrom to also check the spender (msg.sender)
      *      is not blacklisted, matching USDC behavior.
      */
@@ -287,7 +303,7 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
     // ──────────────────────────────────────────────
     function rescueERC20(IERC20 token, address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
-        token.transfer(to, amount);
+        token.safeTransfer(to, amount);
         emit TokensRescued(address(token), to, amount);
     }
 }
