@@ -126,9 +126,7 @@ contract kUSDTest is Test {
     function test_mint_revertsExceedsAllowance() public {
         _configureMinter(minter, 100e6);
         vm.prank(minter);
-        vm.expectRevert(
-            abi.encodeWithSelector(kUSD.MintAllowanceExceeded.selector, 200e6, 100e6)
-        );
+        vm.expectRevert(abi.encodeWithSelector(kUSD.MintAllowanceExceeded.selector, 200e6, 100e6));
         token.mint(alice, 200e6);
     }
 
@@ -197,9 +195,7 @@ contract kUSDTest is Test {
         token.mint(minter, 100e6);
 
         vm.prank(minter);
-        vm.expectRevert(
-            abi.encodeWithSelector(kUSD.BurnAmountExceedsBalance.selector, 200e6, 100e6)
-        );
+        vm.expectRevert(abi.encodeWithSelector(kUSD.BurnAmountExceedsBalance.selector, 200e6, 100e6));
         token.burn(200e6);
     }
 
@@ -436,9 +432,7 @@ contract kUSDTest is Test {
 
     function test_unblacklist_revertsIfNotBlacklisted() public {
         vm.prank(blacklister);
-        vm.expectRevert(
-            abi.encodeWithSelector(kUSD.NotBlacklistedAccount.selector, alice)
-        );
+        vm.expectRevert(abi.encodeWithSelector(kUSD.NotBlacklistedAccount.selector, alice));
         token.unblacklist(alice);
     }
 

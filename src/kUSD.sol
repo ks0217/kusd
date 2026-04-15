@@ -96,12 +96,10 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
     // ──────────────────────────────────────────────
     //  Constructor
     // ──────────────────────────────────────────────
-    constructor(
-        address owner_,
-        address pauser_,
-        address blacklister_,
-        address masterMinter_
-    ) ERC20("kUSD", "kUSD") ERC20Permit("kUSD") {
+    constructor(address owner_, address pauser_, address blacklister_, address masterMinter_)
+        ERC20("kUSD", "kUSD")
+        ERC20Permit("kUSD")
+    {
         if (owner_ == address(0)) revert ZeroAddress();
         if (pauser_ == address(0)) revert ZeroAddress();
         if (blacklister_ == address(0)) revert ZeroAddress();
@@ -203,11 +201,7 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
         return _minterAllowed[minter];
     }
 
-    function configureMinter(address minter, uint256 minterAllowedAmount)
-        external
-        onlyMasterMinter
-        whenNotPaused
-    {
+    function configureMinter(address minter, uint256 minterAllowedAmount) external onlyMasterMinter whenNotPaused {
         if (minter == address(0)) revert ZeroAddress();
         _minters[minter] = true;
         _minterAllowed[minter] = minterAllowedAmount;
@@ -220,12 +214,7 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
         emit MinterRemoved(minter);
     }
 
-    function mint(address to, uint256 amount)
-        external
-        whenNotPaused
-        notBlacklisted(msg.sender)
-        notBlacklisted(to)
-    {
+    function mint(address to, uint256 amount) external whenNotPaused notBlacklisted(msg.sender) notBlacklisted(to) {
         if (!_minters[msg.sender]) revert NotMinter();
         if (amount == 0) revert ZeroAmount();
         if (to == address(0)) revert ZeroAddress();
@@ -237,11 +226,7 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
         _mint(to, amount);
     }
 
-    function burn(uint256 amount)
-        external
-        whenNotPaused
-        notBlacklisted(msg.sender)
-    {
+    function burn(uint256 amount) external whenNotPaused notBlacklisted(msg.sender) {
         if (!_minters[msg.sender]) revert NotMinter();
         if (amount == 0) revert ZeroAmount();
 
@@ -260,11 +245,7 @@ contract kUSD is ERC20, ERC20Permit, Pausable {
     // ──────────────────────────────────────────────
     //  Transfer hooks (enforce pause + blacklist)
     // ──────────────────────────────────────────────
-    function _update(address from, address to, uint256 value)
-        internal
-        override
-        whenNotPaused
-    {
+    function _update(address from, address to, uint256 value) internal override whenNotPaused {
         // Minting (from == 0) and burning (to == 0) have their own guards,
         // but regular transfers must check both parties.
         if (from != address(0) && _blacklisted[from]) revert Blacklisted(from);
